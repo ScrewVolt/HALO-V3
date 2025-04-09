@@ -29,8 +29,13 @@ REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902
 def home():
     return jsonify({"message": "HALO Whisper backend is running!"})
 
-@app.route("/transcribe", methods=["POST"])
+@app.route("/transcribe", methods=["POST", "OPTIONS"])
 def transcribe():
+    # ✅ Fast CORS preflight response
+    if request.method == "OPTIONS":
+        print("🟡 CORS preflight request received")
+        return '', 204
+
     print("📥 /transcribe endpoint hit")
 
     try:

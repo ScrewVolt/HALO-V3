@@ -24,7 +24,7 @@ def add_cors_headers(response):
 
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 REPLICATE_URL = "https://api.replicate.com/v1/predictions"
-REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902586e8"  # Whisper model version
+REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902586e8"
 
 @app.route("/", methods=["GET"])
 def home():
@@ -38,12 +38,11 @@ def transcribe():
 
         file = request.files['file']
 
-        # Save temp audio file locally
+        # Save audio locally
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload to Replicate's file hosting
         print("⬆️ Uploading to Replicate upload API...")
         try:
             with open(temp_audio_path, 'rb') as audio_file:
@@ -60,7 +59,10 @@ def transcribe():
             return jsonify({"error": "Upload to Replicate failed"}), 500
 
         if not upload_response.ok:
-            print("❌ Replicate upload error:", upload_response.text)
+            print("❌ Replicate upload error:")
+            print("Status code:", upload_response.status_code)
+            print("Headers:", upload_response.headers)
+            print("Text:", upload_response.text)
             return jsonify({"error": "Replicate upload API error"}), 500
 
         audio_url = upload_response.json().get("url")
@@ -78,19 +80,16 @@ def transcribe():
         }
 
         replicate_response = requests.post(REPLICATE_URL, json=data, headers=headers)
-        if not upload_response.ok:
-            print("❌ Replicate upload error:")
-            print("Status code:", upload_response.status_code)
-            print("Headers:", upload_response.headers)
-            print("Text:", upload_response.text)
-            return jsonify({"error": "Replicate upload API error"}), 500
-
+        if not replicate_response.ok:
+            print("❌ Replicate Whisper request failed:", replicate_response.text)
+            return jsonify({"error": "Replicate Whisper API call failed"}), 500
 
         prediction = replicate_response.json()
         prediction_id = prediction["id"]
         result_url = f"{REPLICATE_URL}/{prediction_id}"
 
-        # Poll for result
+        print(f"📡 Polling transcription from: {result_url}")
+
         while True:
             time.sleep(1.5)
             poll = requests.get(result_url, headers=headers).json()
@@ -100,7 +99,7 @@ def transcribe():
                 print("✅ Transcription:", transcription)
                 return jsonify({"text": transcription})
             if status == "failed":
-                print("❌ Whisper failed:", poll)
+                print("❌ Whisper transcription failed:", poll)
                 return jsonify({"error": "Transcription failed"}), 500
 
     except Exception as e:

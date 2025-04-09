@@ -43,37 +43,30 @@ def transcribe():
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload to temp.sh (final fix)
-        print("⬆️ Uploading to temp.sh...")
+        # Upload to Replicate's file hosting
+        print("⬆️ Uploading to Replicate upload API...")
         try:
-            file_name = os.path.basename(temp_audio_path)
             with open(temp_audio_path, 'rb') as audio_file:
-                audio_data = audio_file.read()
-
-            upload_response = requests.put(
-                f"https://temp.sh/{file_name}",
-                data=audio_data + b"\n",  # ensure newline at end
-                headers={
-                    "Content-Type": "application/octet-stream",
-                    "Content-Length": str(len(audio_data) + 1)
-                }
-            )
-
+                upload_response = requests.post(
+                    "https://dreambooth-api-experimental.replicate.com/v1/upload",
+                    headers={
+                        "Authorization": f"Token {REPLICATE_API_TOKEN}",
+                    },
+                    files={"file": (os.path.basename(temp_audio_path), audio_file, "audio/webm")}
+                )
             os.remove(temp_audio_path)
-
         except Exception as e:
-            print("❌ Upload to temp.sh crashed:", e)
-            return jsonify({"error": "Upload exception occurred"}), 500
+            print("❌ Upload to Replicate failed:", e)
+            return jsonify({"error": "Upload to Replicate failed"}), 500
 
-        print("📦 temp.sh response:", upload_response.status_code, upload_response.text)
+        if not upload_response.ok:
+            print("❌ Replicate upload error:", upload_response.text)
+            return jsonify({"error": "Replicate upload API error"}), 500
 
-        if upload_response.status_code != 200:
-            return jsonify({"error": "Upload to temp.sh failed"}), 500
+        audio_url = upload_response.json().get("url")
+        print("✅ Uploaded to Replicate:", audio_url)
 
-        audio_url = f"https://temp.sh/{file_name}"
-        print("✅ Uploaded audio URL:", audio_url)
-
-        # Call Replicate
+        # Call Replicate Whisper
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"

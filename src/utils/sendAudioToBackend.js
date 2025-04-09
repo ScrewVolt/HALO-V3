@@ -5,7 +5,9 @@ export async function sendAudioToBackend(audioUrl) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ audio_url: audioUrl }),
+      body: JSON.stringify({
+        audio_url: audioUrl,  // 👈 Make sure this key matches the backend
+      }),
     });
 
     const data = await response.json();

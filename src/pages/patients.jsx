@@ -128,7 +128,8 @@ export default function Patients() {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
       audioChunksRef.current = []
     
-      const text = await sendAudioToBackend(audioBlob)
+      const text = await sendAudioToBackend("https://halo-hospital.netlify.app/uploads/audio-123.webm");
+
       if (text) {
         const tagged = tagSpeaker(text)
         handleSend(tagged)

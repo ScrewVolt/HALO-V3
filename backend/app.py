@@ -13,11 +13,8 @@ print("🔥 Launching HALO Whisper backend")
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
-
-# Enable CORS on all routes explicitly
 CORS(app, resources={r"/*": {"origins": "*"}})
 
-# Add CORS headers explicitly via after_request
 @app.after_request
 def add_cors_headers(response):
     response.headers.add("Access-Control-Allow-Origin", "*")
@@ -46,23 +43,21 @@ def transcribe():
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload to temp.sh (fixed version)
+        # Upload to temp.sh
         print("⬆️ Uploading to temp.sh...")
         try:
             with open(temp_audio_path, 'rb') as audio_file:
                 upload_response = requests.put(
-                f"https://temp.sh/{os.path.basename(temp_audio_path)}",
-                data=audio_file.read(),
-                headers={"Content-Type": "application/octet-stream"}
-            )
-            os.remove(temp_audio_path)
+                    f"https://temp.sh/{os.path.basename(temp_audio_path)}",
+                    data=audio_file.read(),
+                    headers={"Content-Type": "application/octet-stream"}
+                )
+            os.remove(temp_audio_path)  # Remove only once, after successful read
         except Exception as e:
             print("❌ Upload to temp.sh crashed:", e)
             return jsonify({"error": "Upload exception occurred"}), 500
 
         print("📦 temp.sh response:", upload_response.status_code, upload_response.text)
-
-        os.remove(temp_audio_path)  # Clean up temp file
 
         if upload_response.status_code != 200:
             print("❌ temp.sh upload failed:", upload_response.text)
@@ -110,5 +105,5 @@ def transcribe():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Use Render-assigned port or default 5000 locally
+    port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)

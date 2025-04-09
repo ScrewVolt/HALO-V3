@@ -57,7 +57,7 @@ def transcribe():
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
         }
-
+        print(f"📤 Replicate input URL: {audio_url}")
         data = {
             "version": REPLICATE_VERSION,
             "input": { "audio": audio_url }

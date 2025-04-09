@@ -1,4 +1,5 @@
 export async function sendAudioToBackend(audioUrl) {
+  console.log("📤 Sending audio URL to Whisper:", audioUrl);
   try {
     const response = await fetch(`${import.meta.env.VITE_API_URL}/transcribe`, {
       method: "POST",

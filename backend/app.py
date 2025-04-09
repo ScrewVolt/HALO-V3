@@ -43,16 +43,24 @@ def transcribe():
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload to temp.sh
+        # Upload to temp.sh (final fix)
         print("⬆️ Uploading to temp.sh...")
         try:
+            file_name = os.path.basename(temp_audio_path)
             with open(temp_audio_path, 'rb') as audio_file:
-                upload_response = requests.put(
-                    f"https://temp.sh/{os.path.basename(temp_audio_path)}",
-                    data=audio_file.read(),
-                    headers={"Content-Type": "application/octet-stream"}
-                )
-            os.remove(temp_audio_path)  # Remove only once, after successful read
+                audio_data = audio_file.read()
+
+            upload_response = requests.put(
+                f"https://temp.sh/{file_name}",
+                data=audio_data + b"\n",  # ensure newline at end
+                headers={
+                    "Content-Type": "application/octet-stream",
+                    "Content-Length": str(len(audio_data) + 1)
+                }
+            )
+
+            os.remove(temp_audio_path)
+
         except Exception as e:
             print("❌ Upload to temp.sh crashed:", e)
             return jsonify({"error": "Upload exception occurred"}), 500
@@ -60,10 +68,9 @@ def transcribe():
         print("📦 temp.sh response:", upload_response.status_code, upload_response.text)
 
         if upload_response.status_code != 200:
-            print("❌ temp.sh upload failed:", upload_response.text)
             return jsonify({"error": "Upload to temp.sh failed"}), 500
 
-        audio_url = upload_response.url
+        audio_url = f"https://temp.sh/{file_name}"
         print("✅ Uploaded audio URL:", audio_url)
 
         # Call Replicate

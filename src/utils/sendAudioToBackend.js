@@ -1,11 +1,11 @@
-export async function sendAudioToBackend(audioBlob) {
-  const formData = new FormData();
-  formData.append("file", audioBlob, "audio.webm");
-
+export async function sendAudioToBackend(audioUrl) {
   try {
-    const response = await fetch("https://halo-whisper-backend.onrender.com/transcribe", {
+    const response = await fetch(`${import.meta.env.VITE_API_URL}/transcribe`, {
       method: "POST",
-      body: formData,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ audio_url: audioUrl }),
     });
 
     const data = await response.json();

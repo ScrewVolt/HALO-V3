@@ -1,7 +1,6 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
-import tempfile
 import os
 import time
 from dotenv import load_dotenv
@@ -9,7 +8,7 @@ from pathlib import Path
 
 print("🔥 Launching HALO Whisper backend")
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
@@ -35,43 +34,16 @@ def transcribe():
     print("📥 /transcribe endpoint hit")
 
     try:
-        if 'file' not in request.files:
-            print("❌ No file part in request.files")
-            return jsonify({"error": "No file provided"}), 400
+        data = request.json
+        audio_url = data.get("audio_url")
 
-        file = request.files['file']
-        print(f"📁 Received file: {file.filename}")
+        if not audio_url:
+            print("❌ No audio_url provided in request")
+            return jsonify({"error": "Missing audio_url"}), 400
 
-        # Save audio file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
-            file.save(tmp.name)
-            temp_audio_path = tmp.name
+        print(f"🎧 Using audio URL from Netlify: {audio_url}")
 
-        print("⬆️ Uploading to Replicate upload API...")
-
-        try:
-            with open(temp_audio_path, 'rb') as audio_file:
-                upload_response = requests.post(
-                    "https://dreambooth-api-experimental.replicate.com/v1/upload",
-                    headers={
-                        "Authorization": f"Token {REPLICATE_API_TOKEN}",
-                    },
-                    files={"file": (os.path.basename(temp_audio_path), audio_file, "audio/webm")}
-                )
-            os.remove(temp_audio_path)
-        except Exception as e:
-            print("❌ Upload to Replicate failed:", e)
-            return jsonify({"error": "Upload to Replicate failed"}), 500
-
-        if not upload_response.ok:
-            print("❌ Replicate upload failed")
-            print("🔁 Response status:", upload_response.status_code)
-            print("🔁 Response body:", upload_response.text)
-            return jsonify({"error": f"Upload failed: {upload_response.text}"}), 500
-
-        audio_url = upload_response.json().get("url")
-        print("✅ Uploaded to Replicate:", audio_url)
-
+        # Call Replicate Whisper
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"

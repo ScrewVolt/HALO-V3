@@ -12,6 +12,7 @@ import {
 import { auth, db } from "../firebase"
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas"
+import { sendAudioToBackend } from "../utils/sendAudioToBackend.js" // You'll create this below
 
 const highlightKeywords = (text) => {
   return text
@@ -36,6 +37,10 @@ export default function Patients() {
   const exportRef = useRef(null)
   const recognitionRef = useRef(null)
   const shouldRestartRef = useRef(false)
+  const mediaRecorderRef = useRef(null)
+  const silenceTimerRef = useRef(null)
+  const audioChunksRef = useRef([])
+
 
   useEffect(() => {
     if (!selectedPatient || !user) return
@@ -106,67 +111,89 @@ export default function Patients() {
     return `Unspecified: ${text}`
   }
 
-  const startRecognition = () => {
-    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-    if (!SpeechRecognition) return alert("Speech recognition not supported.")
-
-    const recognition = new SpeechRecognition()
-    recognition.continuous = false
-    recognition.interimResults = true
-    recognition.lang = "en-US"
-
-    recognitionRef.current = recognition
-    shouldRestartRef.current = true
-    setRecognizing(true)
-
-    let sessionTranscript = ""
-
-    recognition.onresult = (event) => {
-      let interim = ""
-
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        const transcript = event.results[i][0].transcript.trim()
-        if (event.results[i].isFinal) {
-          sessionTranscript += " " + transcript
-        } else {
-          interim = transcript
-        }
+  const startAutoRecording = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    const mediaRecorder = new MediaRecorder(stream)
+    mediaRecorderRef.current = mediaRecorder
+  
+    audioChunksRef.current = []
+  
+    mediaRecorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        audioChunksRef.current.push(event.data)
       }
-
-      setLiveTranscript(interim)
     }
+  
+    mediaRecorder.onstop = async () => {
+      const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+      audioChunksRef.current = []
+      console.log("🎤 Recording stopped. Sending to backend...")
+      console.log("📦 Audio Blob size:", audioBlob.size)
 
-    recognition.onerror = (event) => {
-      console.error("Speech recognition error:", event.error)
-    }
-
-    recognition.onend = () => {
-      if (sessionTranscript.trim()) {
-        const tagged = tagSpeaker(sessionTranscript.trim())
+      const text = await sendAudioToBackend(audioBlob)
+      if (text) {
+        const tagged = tagSpeaker(text)
         handleSend(tagged)
       }
-
-      setLiveTranscript("")
-      sessionTranscript = ""
-
+  
       if (shouldRestartRef.current) {
-        console.log("🎤 Restarting recognition (Android)")
-        startRecognition()
+        startAutoRecording()
       }
     }
-
-    recognition.start()
+  
+    mediaRecorder.start()
+    setRecognizing(true)
+    shouldRestartRef.current = true
+  
+    detectSilence(stream, 1500, () => {
+      mediaRecorder.stop()
+      stream.getTracks().forEach((track) => track.stop())
+    })
   }
+  
+  function detectSilence(stream, silenceDelay = 1500, onSilence) {
+    const audioCtx = new AudioContext()
+    const analyser = audioCtx.createAnalyser()
+    const source = audioCtx.createMediaStreamSource(stream)
+  
+    source.connect(analyser)
+    analyser.fftSize = 2048
+  
+    const data = new Uint8Array(analyser.fftSize)
+  
+    function checkSilence() {
+      analyser.getByteTimeDomainData(data)
+      const isSilent = data.every((value) => Math.abs(value - 128) < 5)
+  
+      if (isSilent) {
+        if (!silenceTimerRef.current) {
+          silenceTimerRef.current = setTimeout(() => {
+            onSilence()
+            clearTimeout(silenceTimerRef.current)
+            silenceTimerRef.current = null
+          }, silenceDelay)
+        }
+      } else {
+        if (silenceTimerRef.current) {
+          clearTimeout(silenceTimerRef.current)
+          silenceTimerRef.current = null
+        }
+      }
+  
+      requestAnimationFrame(checkSilence)
+    }
+  
+    checkSilence()
+  }
+  
 
-  const stopRecognition = () => {
+  const stopAutoRecording = () => {
     shouldRestartRef.current = false
-    if (recognitionRef.current) {
-      recognitionRef.current.stop()
-      recognitionRef.current = null
+    if (mediaRecorderRef.current?.state === "recording") {
+      mediaRecorderRef.current.stop()
     }
     setRecognizing(false)
-    setLiveTranscript("")
-  }
+  }  
 
   const handleEditStart = (msg) => {
     setEditingMessageId(msg.id)
@@ -342,10 +369,10 @@ ${chatText}
             <button onClick={() => handleSend()} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
               Send
             </button>
-            <button onClick={startRecognition} disabled={recognizing} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
+            <button onClick={startAutoRecording} disabled={recognizing} className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded">
               Start Recognition
             </button>
-            <button onClick={stopRecognition} disabled={!recognizing} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
+            <button onClick={stopAutoRecording} disabled={!recognizing} className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded">
               Stop Recognition
             </button>
             <button onClick={handleExport} className="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-2 rounded">

@@ -78,9 +78,13 @@ def transcribe():
         }
 
         replicate_response = requests.post(REPLICATE_URL, json=data, headers=headers)
-        if not replicate_response.ok:
-            print("❌ Replicate error:", replicate_response.text)
-            return jsonify({"error": "Replicate API call failed"}), 500
+        if not upload_response.ok:
+            print("❌ Replicate upload error:")
+            print("Status code:", upload_response.status_code)
+            print("Headers:", upload_response.headers)
+            print("Text:", upload_response.text)
+            return jsonify({"error": "Replicate upload API error"}), 500
+
 
         prediction = replicate_response.json()
         prediction_id = prediction["id"]

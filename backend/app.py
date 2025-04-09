@@ -7,6 +7,8 @@ import time
 from dotenv import load_dotenv
 from pathlib import Path
 
+print("🔥 Launching HALO Whisper backend")
+
 # Load .env from root folder
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 

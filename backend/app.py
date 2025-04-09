@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 import requests
+import tempfile
 import os
 import time
 from dotenv import load_dotenv
@@ -12,11 +13,7 @@ print("🔥 Launching HALO Whisper backend")
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {
-    "origins": ["https://halo-hospital.netlify.app", "http://localhost:5173"]
-}})
-
-
+CORS(app, resources={r"/*": {"origins": ["https://halo-hospital.netlify.app", "http://localhost:5173"]}})
 
 @app.after_request
 def add_cors_headers(response):
@@ -35,32 +32,43 @@ def home():
 
 @app.route("/transcribe", methods=["POST", "OPTIONS"])
 def transcribe():
-    # ✅ Fast CORS preflight response
     if request.method == "OPTIONS":
-        print("🟡 CORS preflight request received")
+        print("🔹 CORS preflight request received")
         return '', 204
 
-    print("📥 /transcribe endpoint hit")
+    print("📅 /transcribe endpoint hit")
 
     try:
-        data = request.json
-        audio_url = data.get("audio_url")
+        if 'file' not in request.files:
+            print("❌ No file uploaded")
+            return jsonify({"error": "No file provided"}), 400
 
-        if not audio_url:
-            print("❌ No audio_url provided in request")
-            return jsonify({"error": "Missing audio_url"}), 400
+        file = request.files['file']
 
-        print(f"🎧 Using audio URL from Netlify: {audio_url}")
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
+            file.save(tmp.name)
+            temp_audio_path = tmp.name
 
-        # Call Replicate Whisper
+        print("📄 Uploading to file.io...")
+        with open(temp_audio_path, 'rb') as audio_file:
+            upload_response = requests.post("https://file.io", files={"file": audio_file})
+        os.remove(temp_audio_path)
+
+        if not upload_response.ok:
+            print("❌ file.io upload failed:", upload_response.text)
+            return jsonify({"error": "file.io upload failed"}), 500
+
+        audio_url = upload_response.json().get("link")
+        print("✅ Uploaded to file.io:", audio_url)
+
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
         }
-        print(f"📤 Replicate input URL: {audio_url}")
+
         data = {
             "version": REPLICATE_VERSION,
-            "input": { "audio": audio_url }
+            "input": {"audio": audio_url}
         }
 
         replicate_response = requests.post(REPLICATE_URL, json=data, headers=headers)
@@ -72,7 +80,7 @@ def transcribe():
         prediction_id = prediction.get("id")
         result_url = f"{REPLICATE_URL}/{prediction_id}"
 
-        print(f"📡 Polling transcription from: {result_url}")
+        print(f"📱 Polling transcription from: {result_url}")
 
         while True:
             time.sleep(1.5)

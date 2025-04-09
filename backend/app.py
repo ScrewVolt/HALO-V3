@@ -12,7 +12,11 @@ print("🔥 Launching HALO Whisper backend")
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+CORS(app, resources={r"/*": {
+    "origins": ["https://halo-hospital.netlify.app", "http://localhost:5173"]
+}})
+
+
 
 @app.after_request
 def add_cors_headers(response):

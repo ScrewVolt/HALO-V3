@@ -13,6 +13,7 @@ import { auth, db } from "../firebase"
 import jsPDF from "jspdf"
 import html2canvas from "html2canvas"
 import { sendAudioToBackend } from "../utils/sendAudioToBackend.js" // You'll create this below
+import { uploadToFileIO } from "../utils/uploadToFileIO.js";
 
 const highlightKeywords = (text) => {
   return text
@@ -127,9 +128,17 @@ export default function Patients() {
     mediaRecorder.onstop = async () => {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
       audioChunksRef.current = []
-    
-      const text = await sendAudioToBackend("https://halo-hospital.netlify.app/uploads/audio-123.webm");
-
+      
+      const audioUrl = await uploadToFileIO(audioBlob);
+      if (!audioUrl) return;
+      
+      const text = await sendAudioToBackend(audioUrl);
+      
+      if (text) {
+        const tagged = tagSpeaker(text);
+        handleSend(tagged);
+      }
+      
       if (text) {
         const tagged = tagSpeaker(text)
         handleSend(tagged)

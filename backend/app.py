@@ -1,35 +1,78 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import whisper
+import requests
 import tempfile
 import os
+from dotenv import load_dotenv
+
+from pathlib import Path
+load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
 CORS(app)
 
-model = whisper.load_model("tiny")  # Options: tiny, base, small, medium, large
+REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
+
+REPLICATE_URL = "https://api.replicate.com/v1/predictions"
+REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902586e8"  # Whisper model version
 
 @app.route("/transcribe", methods=["POST"])
 def transcribe():
-    print("📥 Request received!")
-
     if 'file' not in request.files:
-        print("❌ No file in request")
-        return jsonify({"error": "No file uploaded"}), 400
+        return jsonify({"error": "No file provided"}), 400
 
     file = request.files['file']
-    print("✅ File received:", file.filename)
 
+    # Save temp audio file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
         file.save(tmp.name)
-        print("💾 Saved temp file:", tmp.name)
+        temp_audio_path = tmp.name
 
-        result = model.transcribe(tmp.name)
-        print("🧠 Whisper result:", result)
+    # Upload the file to file.io (or use your own uploader if needed)
+    with open(temp_audio_path, 'rb') as audio_file:
+        upload_response = requests.post("https://file.io", files={"file": audio_file})
 
-        os.remove(tmp.name)
+    os.remove(temp_audio_path)  # clean up
 
-    return jsonify({"text": result["text"]})
+    if not upload_response.ok:
+        return jsonify({"error": "Failed to upload audio file"}), 500
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    audio_url = upload_response.json().get("link")
+    print("🎧 Uploaded audio URL:", audio_url)
+
+    # Call Replicate Whisper
+    headers = {
+        "Authorization": f"Token {REPLICATE_API_TOKEN}",
+        "Content-Type": "application/json"
+    }
+
+    data = {
+        "version": REPLICATE_VERSION,
+        "input": {
+            "audio": audio_url
+        }
+    }
+
+    replicate_response = requests.post(REPLICATE_URL, json=data, headers=headers)
+    if not replicate_response.ok:
+        print("❌ Replicate request failed:", replicate_response.text)
+        return jsonify({"error": "Replicate API call failed"}), 500
+
+    prediction = replicate_response.json()
+    prediction_id = prediction["id"]
+
+    # Poll until transcription is complete
+    result_url = f"{REPLICATE_URL}/{prediction_id}"
+
+    while True:
+        status_response = requests.get(result_url, headers=headers).json()
+        status = status_response.get("status")
+
+        if status == "succeeded":
+            transcription = status_response["output"]
+            print("✅ Transcription result:", transcription)
+            return jsonify({"text": transcription})
+
+        elif status == "failed":
+            print("❌ Transcription failed:", status_response)
+            return jsonify({"error": "Whisper failed"}), 500

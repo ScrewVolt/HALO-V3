@@ -127,19 +127,20 @@ export default function Patients() {
     mediaRecorder.onstop = async () => {
       const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
       audioChunksRef.current = []
-      console.log("🎤 Recording stopped. Sending to backend...")
-      console.log("📦 Audio Blob size:", audioBlob.size)
-
+    
       const text = await sendAudioToBackend(audioBlob)
       if (text) {
         const tagged = tagSpeaker(text)
         handleSend(tagged)
       }
-  
+    
       if (shouldRestartRef.current) {
-        startAutoRecording()
+        setTimeout(() => {
+          startAutoRecording()
+          console.log("🎤 Restarting auto-recording after pause...")
+        }, 500) // wait 0.5s before restarting
       }
-    }
+    }    
   
     mediaRecorder.start()
     setRecognizing(true)
@@ -147,7 +148,7 @@ export default function Patients() {
   
     detectSilence(stream, 1500, () => {
       mediaRecorder.stop()
-      stream.getTracks().forEach((track) => track.stop())
+      stream.getTracks().forEach(track => track.stop())      
     })
   }
   

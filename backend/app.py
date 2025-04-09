@@ -11,11 +11,21 @@ from pathlib import Path
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
-CORS(app)  # Allow requests from frontend (localhost, Netlify, etc.)
+
+# Enable CORS on all routes explicitly
+CORS(app, resources={r"/*": {"origins": "*"}})
+
+# Add CORS headers explicitly via after_request
+@app.after_request
+def add_cors_headers(response):
+    response.headers.add("Access-Control-Allow-Origin", "*")
+    response.headers.add("Access-Control-Allow-Headers", "Content-Type,Authorization")
+    response.headers.add("Access-Control-Allow-Methods", "GET,PUT,POST,DELETE,OPTIONS")
+    return response
 
 REPLICATE_API_TOKEN = os.getenv("REPLICATE_API_TOKEN")
 REPLICATE_URL = "https://api.replicate.com/v1/predictions"
-REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902586e8"  # Whisper v1.4.0
+REPLICATE_VERSION = "cfe465e163c985e9e7c4b9e52ed31c65b6d9b4e23509212efb00f002902586e8"  # Whisper model version
 
 @app.route("/", methods=["GET"])
 def home():
@@ -33,7 +43,7 @@ def transcribe():
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload to file.io
+        # Upload the file to file.io
         with open(temp_audio_path, 'rb') as audio_file:
             upload_response = requests.post("https://file.io", files={"file": audio_file})
         os.remove(temp_audio_path)
@@ -43,7 +53,7 @@ def transcribe():
             return jsonify({"error": "Failed to upload audio"}), 500
 
         audio_url = upload_response.json().get("link")
-        print("🎧 Uploaded to:", audio_url)
+        print("🎧 Uploaded audio URL:", audio_url)
 
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
@@ -69,11 +79,10 @@ def transcribe():
             time.sleep(1.5)
             poll = requests.get(result_url, headers=headers).json()
             status = poll.get("status")
-
             if status == "succeeded":
-                print("✅ Transcription:", poll["output"])
-                return jsonify({"text": poll["output"]})
-
+                transcription = poll.get("output")
+                print("✅ Transcription:", transcription)
+                return jsonify({"text": transcription})
             if status == "failed":
                 print("❌ Whisper failed:", poll)
                 return jsonify({"error": "Transcription failed"}), 500
@@ -82,7 +91,6 @@ def transcribe():
         print("🔥 Unexpected error:", e)
         return jsonify({"error": "Server error"}), 500
 
-# Bind to Render port or default local port
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
+    port = int(os.environ.get("PORT", 5000))  # Use Render-assigned port or default 5000 locally
     app.run(host="0.0.0.0", port=port)

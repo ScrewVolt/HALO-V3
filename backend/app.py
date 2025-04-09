@@ -59,11 +59,11 @@ def transcribe():
             return jsonify({"error": "Upload to Replicate failed"}), 500
 
         if not upload_response.ok:
-            print("❌ Replicate upload error:")
-            print("Status code:", upload_response.status_code)
-            print("Headers:", upload_response.headers)
-            print("Text:", upload_response.text)
-            return jsonify({"error": "Replicate upload API error"}), 500
+            print("❌ Replicate upload failed")
+            print("🔁 Response status:", upload_response.status_code)
+            print("🔁 Response body:", upload_response.text)
+            return jsonify({"error": f"Upload failed: {upload_response.text}"}), 500
+
 
         audio_url = upload_response.json().get("url")
         print("✅ Uploaded to Replicate:", audio_url)

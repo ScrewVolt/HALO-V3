@@ -90,8 +90,11 @@ def transcribe():
                 return jsonify({"error": "Transcription failed"}), 500
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         print("🔥 Unexpected error:", e)
-        return jsonify({"error": "Server error"}), 500
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # Use Render-assigned port or default 5000 locally

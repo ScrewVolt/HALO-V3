@@ -55,8 +55,18 @@ def transcribe():
         os.remove(temp_audio_path)
 
         if not upload_response.ok:
-            print("❌ file.io upload failed:", upload_response.text)
+            print("❌ file.io upload failed")
+            print("Status code:", upload_response.status_code)
+            print("Response text:", upload_response.text)
             return jsonify({"error": "file.io upload failed"}), 500
+
+        try:
+            audio_url = upload_response.json().get("link")
+        except Exception as e:
+            print("❌ Failed to parse file.io response")
+            print("Raw response:", upload_response.text)
+            return jsonify({"error": "Invalid file.io response"}), 500
+
 
         audio_url = upload_response.json().get("link")
         print("✅ Uploaded to file.io:", audio_url)

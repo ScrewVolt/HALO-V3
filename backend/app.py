@@ -9,7 +9,7 @@ from pathlib import Path
 
 print("🔥 Launching HALO Whisper backend")
 
-# Load .env from root folder
+# Load environment variables from .env file
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env")
 
 app = Flask(__name__)
@@ -32,18 +32,23 @@ def home():
 
 @app.route("/transcribe", methods=["POST"])
 def transcribe():
+    print("📥 /transcribe endpoint hit")
+
     try:
         if 'file' not in request.files:
+            print("❌ No file part in request.files")
             return jsonify({"error": "No file provided"}), 400
 
         file = request.files['file']
+        print(f"📁 Received file: {file.filename}")
 
-        # Save audio locally
+        # Save audio file temporarily
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
         print("⬆️ Uploading to Replicate upload API...")
+
         try:
             with open(temp_audio_path, 'rb') as audio_file:
                 upload_response = requests.post(
@@ -64,11 +69,9 @@ def transcribe():
             print("🔁 Response body:", upload_response.text)
             return jsonify({"error": f"Upload failed: {upload_response.text}"}), 500
 
-
         audio_url = upload_response.json().get("url")
         print("✅ Uploaded to Replicate:", audio_url)
 
-        # Call Replicate Whisper
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
@@ -85,7 +88,7 @@ def transcribe():
             return jsonify({"error": "Replicate Whisper API call failed"}), 500
 
         prediction = replicate_response.json()
-        prediction_id = prediction["id"]
+        prediction_id = prediction.get("id")
         result_url = f"{REPLICATE_URL}/{prediction_id}"
 
         print(f"📡 Polling transcription from: {result_url}")
@@ -104,9 +107,11 @@ def transcribe():
 
     except Exception as e:
         import traceback
+        print("🔥 Unexpected error occurred in /transcribe")
         traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
+    print(f"🟢 Binding Flask to port {port}")
     app.run(host="0.0.0.0", port=port)

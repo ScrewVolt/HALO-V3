@@ -41,22 +41,29 @@ def transcribe():
 
         file = request.files['file']
 
+        # Save temp audio file locally
         with tempfile.NamedTemporaryFile(delete=False, suffix=".webm") as tmp:
             file.save(tmp.name)
             temp_audio_path = tmp.name
 
-        # Upload the file to file.io
+        # Upload to temp.sh
+        print("⬆️ Uploading to temp.sh...")
         with open(temp_audio_path, 'rb') as audio_file:
-            upload_response = requests.post("https://file.io", files={"file": audio_file})
-        os.remove(temp_audio_path)
+            upload_response = requests.put(
+                f"https://temp.sh/{os.path.basename(temp_audio_path)}",
+                data=audio_file
+            )
 
-        if not upload_response.ok:
-            print("❌ Upload failed:", upload_response.text)
-            return jsonify({"error": "Failed to upload audio"}), 500
+        os.remove(temp_audio_path)  # Clean up temp file
 
-        audio_url = upload_response.json().get("link")
-        print("🎧 Uploaded audio URL:", audio_url)
+        if upload_response.status_code != 200:
+            print("❌ temp.sh upload failed:", upload_response.text)
+            return jsonify({"error": "Upload to temp.sh failed"}), 500
 
+        audio_url = upload_response.url
+        print("✅ Uploaded audio URL:", audio_url)
+
+        # Call Replicate
         headers = {
             "Authorization": f"Token {REPLICATE_API_TOKEN}",
             "Content-Type": "application/json"
@@ -92,9 +99,7 @@ def transcribe():
     except Exception as e:
         import traceback
         traceback.print_exc()
-        print("🔥 Unexpected error:", e)
         return jsonify({"error": str(e)}), 500
-
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # Use Render-assigned port or default 5000 locally

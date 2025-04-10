@@ -32,11 +32,13 @@ def home():
 
 @app.route("/transcribe", methods=["POST", "OPTIONS"])
 def transcribe():
+    print("📥 /transcribe endpoint hit")
+
     if request.method == "OPTIONS":
-        print("🔹 CORS preflight request received")
+        print("🟡 Handling CORS preflight")
         return '', 204
 
-    print("📅 /transcribe endpoint hit")
+    print("📦 Handling POST audio blob upload")
 
     try:
         if 'file' not in request.files:
@@ -50,9 +52,18 @@ def transcribe():
             temp_audio_path = tmp.name
 
         print("📄 Uploading to file.io...")
-        with open(temp_audio_path, 'rb') as audio_file:
-            upload_response = requests.post("https://file.io", files={"file": audio_file})
-        os.remove(temp_audio_path)
+        try:
+            with open(temp_audio_path, 'rb') as audio_file:
+                upload_response = requests.post("https://file.io", files={"file": audio_file})
+                print("📤 file.io status:", upload_response.status_code)
+                print("📤 file.io response:", upload_response.text)
+            os.remove(temp_audio_path)
+        except Exception as e:
+            print("🔥 file.io upload crashed")
+            import traceback
+            traceback.print_exc()
+            return jsonify({"error": "file.io upload crashed"}), 500
+
 
         if not upload_response.ok:
             print("❌ file.io upload failed")
